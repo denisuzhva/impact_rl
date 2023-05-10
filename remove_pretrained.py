@@ -3,13 +3,13 @@ import os
 
 
 
-cfg_path = f'./prototype2_csnet/cfg/'
+cfg_path = f'./cfg/'
 with open(cfg_path + 'general.yaml') as f:
     general_cfg = yaml.safe_load(f)
 
-chkp_dir = f'./prototype2_csnet/checkpoints/'
+chkp_dir = f'./checkpoints/'
 chkp_fnames = os.listdir(chkp_dir)
-log_dir = f'./prototype2_csnet/train_logs/'
+log_dir = f'./train_logs/'
 
 runs = general_cfg['runs']
 input(f"Press Enter to remove trained models: {runs}")

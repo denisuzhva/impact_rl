@@ -37,7 +37,7 @@ def fft_l1_norm(fft_size=4096):
     return get_norm
 
 
-def train_q_agent(agent, 
+def train_q_agent(agent_data, 
                   learning_rate_params,
                   dql_params,
                   crit_lambdas, 
@@ -51,7 +51,10 @@ def train_q_agent(agent,
     The trainer function for agent training.
 
     Args:
-        agent:                  Agent, which we wish to train
+        agent_data:             Agent data (Dictionary):
+            agent:              Agent class
+            policy_net:         Policy Q-network
+            target_net:         Target Q-network
         learning_rate_params:   Learning rate params for optimizer and scheduler
         dql_params:             Deep Q-Learning parameters (eps greedy parameters, replay buffer, etc.)
         crit_lambdas:           Weight coefficients for loss functions
@@ -73,11 +76,10 @@ def train_q_agent(agent,
         'l1norm': fft_l1_norm(),
     }             
     
-    model_types = agent['models'].keys()
-    agent = agent['agent']
+    agent = agent_data['agent']
     buffer = agent.exp_buffer
-    policy_net = agent['models']['policy_net']
-    target_net = agent['modesl']['target_net']
+    policy_net = agent_data['policy_net']
+    target_net = agent_data['target_net']
     #model_params = []
     #for _, model in models.values():
     #    model_params += list(model.parameters())
@@ -95,65 +97,38 @@ def train_q_agent(agent,
         lr_scheduler.load_state_dict(opt_chkp[scheduler_chkpt_name])
 
     # Training
-    start_t = time.time() 
-
-    eps_start = dql_gamma['eps_start']
+    eps_start = dql_params['eps_start']
     eps_decay = dql_params['eps_decay']
     eps_min = dql_params['eps_min']
-    dql_gamma = dql_params['dql_gamma']                 
+    dql_gamma = dql_params['dql_gamma']
     sync_target_frames = dql_params['sync_target_frames']
     replay_start_size = dql_params['replay_start_size']
     batch_size = dql_params['batch_size']
     n_trials = dql_params['n_trials']
     total_rewards_size = dql_params['total_rewards_size']
 
+    best_mean_reward = None
     total_rewards = collections.deque(maxlen=total_rewards_size)
     loss_vals = {}
     frame_idx = last_frame_idx
     trial_idx = 0
     epsilon = eps_start
     
+    if last_frame_idx == 0:
+        log_header = True
+    else:
+        log_header = False
+
+    start_t = time.time() 
+
     while True:
         frame_idx += 1
 
         for lm in crit_lambdas.keys():
             loss_vals[lm] = 0.
 
-        if len(buffer) < replay_start_size:
-            continue
-
-        batch = buffer.sample(batch_size)
-        states, actions, rewards, dones, next_states = batch
-
-        states_v = torch.tensor(states).to(device)
-        next_states_v = torch.tensor(next_states).to(device)
-        actions_v = torch.tensor(actions).to(device)
-        rewards_v = torch.tensor(rewards).to(device)
-        done_mask = torch.ByteTensor(dones).to(device)
-
-        state_action_values = policy_net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
-        next_state_values = target_net(next_states_v).max(1)[0]
-        next_state_values[done_mask] = 0.0
-        next_state_values = next_state_values.detach()
-        expected_state_action_values = next_state_values * dql_gamma + rewards_v
-
-        losses = {}
-        for lm in crit_lambdas.keys():
-            losses[lm] = crit_lambdas[lm] * crits[lm](state_action_values, expected_state_action_values)
-            loss_vals['t'][lm] += losses[lm].cpu().item() # / n_train_batches
-
-        optimizer.zero_grad()
-        loss = sum(losses.values())
-        loss.backward()
-        optimizer.step()
-        lr_scheduler.step()
-
         epsilon = max(epsilon * eps_decay, eps_min)
         reward = agent.play_step(policy_net, epsilon, device=device)
-
-        if loss_vals[list(crit_lambdas.keys())[0]] < min_v_loss:
-            min_v_loss = loss_vals[list(crit_lambdas.keys())[0]]
-
         if reward is not None:
             total_rewards.append(reward)
             mean_reward = np.mean(total_rewards)
@@ -169,8 +144,51 @@ def train_q_agent(agent,
                 }, opt_path)
                 best_mean_reward = mean_reward
                 if best_mean_reward is not None:
-                    print("Best mean reward updated %.3f" % (best_mean_reward))
+                    print("Best mean reward updated %.3f" % (best_mean_reward)) 
 
+            if trial_idx > n_trials:
+                print("Solved in %d frames!" % frame_idx)
+                break
+            
+            trial_idx += 1
+
+        if len(buffer) < replay_start_size:
+            continue
+
+        batch = buffer.sample(batch_size)
+        states, actions, rewards, dones, next_states = batch
+
+        states_v = torch.tensor(states).to(device)
+        next_states_v = torch.tensor(next_states).to(device)
+        actions_v = torch.LongTensor(actions).to(device)
+        rewards_v = torch.tensor(rewards).to(device)
+        done_mask = torch.BoolTensor(dones).to(device)
+
+        next_state_values = target_net(next_states_v).max(1)[0]
+        next_state_values[done_mask] = 0.0
+        next_state_values = next_state_values.detach()
+        expected_state_action_values = next_state_values * dql_gamma + rewards_v
+        state_action_values = policy_net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
+        #state_action_values = policy_net(states_v).gather(1, actions_v)
+
+        losses = {}
+        for lm in crit_lambdas.keys():
+            losses[lm] = crit_lambdas[lm] * crits[lm](state_action_values, expected_state_action_values)
+            loss_vals[lm] += losses[lm].cpu().item() # / n_train_batches
+
+        optimizer.zero_grad()
+        loss = sum(losses.values())
+        loss.backward()
+        optimizer.step()
+        lr_scheduler.step()
+
+        if loss_vals[list(crit_lambdas.keys())[0]] < min_v_loss:
+            min_v_loss = loss_vals[list(crit_lambdas.keys())[0]]
+
+        if frame_idx % sync_target_frames == 0:
+            #print(agent.env.get_img_state())
+            print(agent.env.state)
+            print(agent.env.target_state)
             d = {"frame_idx": [frame_idx], "min_v_loss": [min_v_loss]}
             for lm in crit_lambdas.keys():
                 d[lm] = [loss_vals[lm]]
@@ -181,13 +199,6 @@ def train_q_agent(agent,
             df.to_csv(log_df_path, mode='a', header=log_header, index=False)
             log_header = False
 
-            if trial_idx > n_trials:
-                print("Solved in %d frames!" % frame_idx)
-                break
-            
-            trial_idx += 1
-
-        if frame_idx % sync_target_frames == 0:
             target_net.load_state_dict(policy_net.state_dict())
 
     print("t: ", time.time() - start_t)

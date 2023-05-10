@@ -1,8 +1,8 @@
 policy_net:
     model_class: Simple_QL_FC
     params:
-        n_features: [512, 512]
+        n_features: [128, 128]
 target_net:
     model_class: Simple_QL_FC
     params:
-        n_features: [512, 512]
+        n_features: [128, 128]

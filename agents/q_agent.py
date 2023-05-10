@@ -6,6 +6,7 @@ import collections
 
 Experience = collections.namedtuple('Experience', field_names=['state', 'action', 'reward', 'done', 'new_state'])
 
+
 class ExperienceReplay:
     def __init__(self, capacity):
         self.buffer = collections.deque(maxlen=capacity)
@@ -44,13 +45,13 @@ class Simple_Agent:
             _, act_v = torch.max(q_vals_v, dim=1)
             action = int(act_v.item())
 
-            new_state, reward, is_done, _ = self.env.step(action)
-            self.total_reward += reward
-            
-            exp = Experience(self.state, action, reward, is_done, new_state)
-            self.exp_buffer.append(exp)
-            self.state = new_state
-            if is_done:
-                done_reward = self.total_reward
-                self._reset()
-                return done_reward
+        new_state, reward, is_done, _ = self.env.step(action)
+        self.total_reward += reward
+        
+        exp = Experience(self.state, action, reward, is_done, new_state)
+        self.exp_buffer.append(exp)
+        self.state = new_state
+        if is_done:
+            done_reward = self.total_reward
+            self._reset()
+            return done_reward

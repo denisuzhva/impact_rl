@@ -9,7 +9,7 @@ import yaml
 from pprint import pprint
 
 from q_trainer import train_q_agent
-import environments.playground
+import environments.q_playground
 import agents.q_agent 
 from agents.q_agent import ExperienceReplay
 import nets.q_nets
@@ -41,25 +41,30 @@ if __name__ == '__main__':
             
         # Create environment
         env_name = env_data['name']
-        env_class = getattr(environments.playground, env_name)
+        env_class = getattr(environments.q_playground, env_name)
         env = env_class(env_data['img_path'],
-                        env_data['reward_weight']) 
+                        env_data['reward_weight'],
+                        env_data['flatten']) 
+        env_state_size = env.state_size
         
         # Define the agents and Q-networks
-        agents = {}
+        agents_list = []
         n_agents = agent_data['n_agents']
         for adx in range(n_agents):
-            agents[adx] = {}
-            buffer = ExperienceReplay(agent_data['replay_size'])
+            agents_list.append({})
+            #buffer = ExperienceReplay(agent_data['replay_size'])
+            buffer = ExperienceReplay(trainer_params['dql_params']['replay_start_size'])
             agent_class_name = agent_data['agent_class']
-            agent_class = getattr(agents.q_agent, agent_class)
-            agents[adx]['agent'] = agent_class(env, buffer)
+            agent_class = getattr(agents.q_agent, agent_class_name)
+            agents_list[adx]['agent'] = agent_class(env, buffer)
             for model_type, model_data in all_models_data.items():
                 model_class_name = model_data['model_class']
                 model_class = getattr(nets.q_nets, model_class_name)
+                model_data['params']['in_size'] = env_state_size
+                model_data['params']['out_size'] = env_state_size
                 model = model_class(model_data['params'])
                 model.to(device)
-                agents[adx][model_type] = model
+                agents_list[adx][model_type] = model
  
         # Log and model checkpoints
         train_log_dir = './train_logs/'
@@ -85,17 +90,17 @@ if __name__ == '__main__':
         if os.path.exists(train_log_path):
             print("Log loaded")
             log_df = pd.read_csv(train_log_path)
-            last_epoch = log_df["epoch"].iloc[-1]
+            last_frame_idx = log_df["frame_idx"].iloc[-1]
             min_v_loss = log_df['min_v_loss'].iloc[-1]
         else:
             print("Initiating new log")
-            last_epoch = 0
+            last_frame_idx = 0
             min_v_loss = np.Inf
 
         # Train the first agent
         if trainer_params['do_train']:
             train_q_agent(
-                agents[0],
+                agents_list[0],
                 learning_rate_params=trainer_params['lr_params'],
                 dql_params=trainer_params['dql_params'],
                 crit_lambdas=trainer_params['losses'],
@@ -104,7 +109,7 @@ if __name__ == '__main__':
                 log_df_path=train_log_path,
                 trained_dump_dir=trained_dump_dir,
                 opt_path=opt_path,
-                last_epoch=last_epoch,
+                last_frame_idx=last_frame_idx,
                 min_v_loss=min_v_loss,
                 opt_chkp=opt_chkp,
             )
