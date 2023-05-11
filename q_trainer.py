@@ -80,6 +80,7 @@ def train_q_agent(agent_data,
     buffer = agent.exp_buffer
     policy_net = agent_data['policy_net']
     target_net = agent_data['target_net']
+    target_net.load_state_dict(policy_net.state_dict())
     #model_params = []
     #for _, model in models.values():
     #    model_params += list(model.parameters())
@@ -107,7 +108,7 @@ def train_q_agent(agent_data,
     n_trials = dql_params['n_trials']
     total_rewards_size = dql_params['total_rewards_size']
 
-    best_mean_reward = None
+    best_mean_reward = -float('inf')
     total_rewards = collections.deque(maxlen=total_rewards_size)
     loss_vals = {}
     frame_idx = last_frame_idx
@@ -133,8 +134,8 @@ def train_q_agent(agent_data,
             total_rewards.append(reward)
             mean_reward = np.mean(total_rewards)
 
-            print("%d:  %d games, mean reward %.3f, (epsilon %.2f)" % (
-                frame_idx, trial_idx, mean_reward, epsilon))
+            #print("%d:  %d games, mean reward %.3f, (epsilon %.4f)" % (
+            #    frame_idx, trial_idx, mean_reward, epsilon))
             
             if best_mean_reward is None or mean_reward > best_mean_reward:
                 torch.save(policy_net.state_dict(), trained_dump_dir + f'{run_name}_0_policy_net.pth')
@@ -164,11 +165,20 @@ def train_q_agent(agent_data,
         rewards_v = torch.tensor(rewards).to(device)
         done_mask = torch.BoolTensor(dones).to(device)
 
-        next_state_values = target_net(next_states_v).max(1)[0]
+        policy_q_values = policy_net(states_v)
+        state_action_values = policy_q_values.gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
+        target_q_values = target_net(next_states_v)
+        next_state_values = target_q_values.max(1)[0]
+
+        #print("Policy Q", policy_q_values)
+        #print("Actions", actions_v)
+        #print("State Action Values", state_action_values)
+        #print("Target Q", target_q_values)
+        #print("Next State Values", next_state_values)
+        
         next_state_values[done_mask] = 0.0
         next_state_values = next_state_values.detach()
         expected_state_action_values = next_state_values * dql_gamma + rewards_v
-        state_action_values = policy_net(states_v).gather(1, actions_v.unsqueeze(-1)).squeeze(-1)
         #state_action_values = policy_net(states_v).gather(1, actions_v)
 
         losses = {}
@@ -188,8 +198,8 @@ def train_q_agent(agent_data,
         if frame_idx % sync_target_frames == 0:
             #print(agent.env.get_img_state())
             print(agent.env.state)
-            print(agent.env.target_state)
-            d = {"frame_idx": [frame_idx], "min_v_loss": [min_v_loss]}
+            #print(agent.env.target_state)
+            d = {"frame_idx": [frame_idx], "trials": [trial_idx], "min_v_loss": [min_v_loss], "top_avg_reward": [best_mean_reward]}
             for lm in crit_lambdas.keys():
                 d[lm] = [loss_vals[lm]]
                 loss_vals[lm] = 0. 

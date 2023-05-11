@@ -36,6 +36,7 @@ class Simple_QL_FC(nn.Module):
             layers.append(nn.Linear(curr_in_size, curr_out_size))
             layers.append(activation_func('relu'))
         layers.append(nn.Linear(n_features_tot[-2], n_features_tot[-1]))
+        #layers.append
         self.net = nn.Sequential(*layers)
 
     def forward(self, x):
