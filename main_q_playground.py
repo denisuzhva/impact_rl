@@ -52,7 +52,6 @@ if __name__ == '__main__':
         n_agents = agent_data['n_agents']
         for adx in range(n_agents):
             agents_list.append({})
-            #buffer = ExperienceReplay(agent_data['replay_size'])
             buffer = ExperienceReplay(trainer_params['dql_params']['replay_start_size'])
             agent_class_name = agent_data['agent_class']
             agent_class = getattr(agents.q_agent, agent_class_name)
@@ -90,12 +89,13 @@ if __name__ == '__main__':
         if os.path.exists(train_log_path):
             print("Log loaded")
             log_df = pd.read_csv(train_log_path)
-            last_frame_idx = log_df["frame_idx"].iloc[-1]
-            min_v_loss = log_df['min_v_loss'].iloc[-1]
+            #last_frame_idx = log_df['frame_idx'].iloc[-1]
+            #min_v_loss = log_df['min_v_loss'].iloc[-1]
         else:
             print("Initiating new log")
-            last_frame_idx = 0
-            min_v_loss = np.Inf
+            log_df = None
+            #last_frame_idx = 0
+            #min_v_loss = np.Inf
 
         # Train the first agent
         if trainer_params['do_train']:
@@ -104,13 +104,14 @@ if __name__ == '__main__':
                 learning_rate_params=trainer_params['lr_params'],
                 dql_params=trainer_params['dql_params'],
                 crit_lambdas=trainer_params['losses'],
-                run_name=run_name,
                 device=device,
+                run_name=run_name,
+                log_df=log_df,
                 log_df_path=train_log_path,
                 trained_dump_dir=trained_dump_dir,
                 opt_path=opt_path,
-                last_frame_idx=last_frame_idx,
-                min_v_loss=min_v_loss,
+                #last_frame_idx=last_frame_idx,
+                #min_v_loss=min_v_loss,
                 opt_chkp=opt_chkp,
             )
             

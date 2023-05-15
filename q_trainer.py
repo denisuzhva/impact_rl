@@ -43,9 +43,9 @@ def train_q_agent(agent_data,
                   crit_lambdas, 
                   device, 
                   run_name,
-                  log_df_path, trained_dump_dir, opt_path,
-                  last_frame_idx=0,
-                  min_v_loss=np.Inf,
+                  log_df,
+                  log_df_path, 
+                  trained_dump_dir, opt_path,
                   opt_chkp=None):
     """
     The trainer function for agent training.
@@ -63,8 +63,6 @@ def train_q_agent(agent_data,
         log_df_path:            Path to training logs
         trained_dump_path:      Path to model dump
         opt_path:               Path to the optimizer and scheduler checkpoints
-        last_frame_idx:         Last frame index before current transfer learning
-        min_v_loss:             Minimum validation loss among all frame_idxs
         opt_chkp:               Optimizer and scheduler checkpoints
     """
 
@@ -102,20 +100,37 @@ def train_q_agent(agent_data,
     eps_decay = dql_params['eps_decay']
     eps_min = dql_params['eps_min']
     dql_gamma = dql_params['dql_gamma']
-    sync_target_frames = dql_params['sync_target_frames']
+    #sync_target_frames = dql_params['sync_target_frames']
+    tau = dql_params['tau']
     replay_start_size = dql_params['replay_start_size']
     batch_size = dql_params['batch_size']
     n_trials = dql_params['n_trials']
     total_rewards_size = dql_params['total_rewards_size']
 
-    best_mean_reward = -float('inf')
     total_rewards = collections.deque(maxlen=total_rewards_size)
-    loss_vals = {}
-    frame_idx = last_frame_idx
-    trial_idx = 0
-    epsilon = eps_start
     
-    if last_frame_idx == 0:
+    print("Losses: ")
+    loss_vals = {}
+    for lm in crit_lambdas.keys():
+        loss_vals[lm] = 0.
+        print(f"{crit_lambdas[lm]} * {lm}")
+
+    if log_df:
+        print("Log loaded into Trainer")
+        frame_idx = log_df['frame_idx'].iloc[-1] 
+        trial_idx = log_df['trial_idx'].iloc[-1]
+        min_v_loss = log_df['min_v_loss'].iloc[-1]
+        best_mean_reward = log_df['top_avg_reward'].iloc[-1]
+        epsilon = log_df['eps'].iloc[-1]
+    else:
+        print("Initializing logging values")
+        frame_idx = 0
+        trial_idx = 0
+        min_v_loss = float('inf')
+        best_mean_reward = -float('inf')
+        epsilon = eps_start
+    
+    if frame_idx == 0:
         log_header = True
     else:
         log_header = False
@@ -124,9 +139,6 @@ def train_q_agent(agent_data,
 
     while True:
         frame_idx += 1
-
-        for lm in crit_lambdas.keys():
-            loss_vals[lm] = 0.
 
         epsilon = max(epsilon * eps_decay, eps_min)
         reward = agent.play_step(policy_net, epsilon, device=device)
@@ -146,6 +158,23 @@ def train_q_agent(agent_data,
                 best_mean_reward = mean_reward
                 if best_mean_reward is not None:
                     print("Best mean reward updated %.3f" % (best_mean_reward)) 
+
+                #print(agent.env.get_img_state())
+                print(agent.env.state)
+                #print(agent.env.target_state)
+                d = {"frame_idx": [frame_idx], 
+                     "trials": [trial_idx], 
+                     "min_v_loss": [min_v_loss], 
+                     "top_avg_reward": [best_mean_reward],
+                     "eps": [epsilon],
+                     }
+                for lm in crit_lambdas.keys():
+                    d[lm] = [loss_vals[lm]]
+                d_rounded = {key: round(value[0], 7) for key, value in d.items()}
+                print(d_rounded)
+                df = pd.DataFrame.from_dict(d)
+                df.to_csv(log_df_path, mode='a', header=log_header, index=False)
+                log_header = False
 
             if trial_idx > n_trials:
                 print("Solved in %d frames!" % frame_idx)
@@ -189,27 +218,26 @@ def train_q_agent(agent_data,
         optimizer.zero_grad()
         loss = sum(losses.values())
         loss.backward()
+        torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
         optimizer.step()
         lr_scheduler.step()
 
         if loss_vals[list(crit_lambdas.keys())[0]] < min_v_loss:
             min_v_loss = loss_vals[list(crit_lambdas.keys())[0]]
 
-        if frame_idx % sync_target_frames == 0:
-            #print(agent.env.get_img_state())
-            print(agent.env.state)
-            #print(agent.env.target_state)
-            d = {"frame_idx": [frame_idx], "trials": [trial_idx], "min_v_loss": [min_v_loss], "top_avg_reward": [best_mean_reward]}
-            for lm in crit_lambdas.keys():
-                d[lm] = [loss_vals[lm]]
-                loss_vals[lm] = 0. 
-            d_rounded = {key: round(value[0], 7) for key, value in d.items()}
-            print(d_rounded)
-            df = pd.DataFrame.from_dict(d)
-            df.to_csv(log_df_path, mode='a', header=log_header, index=False)
-            log_header = False
+        #if frame_idx % sync_target_frames == 0:
+        #    target_net.load_state_dict(policy_net.state_dict())
 
-            target_net.load_state_dict(policy_net.state_dict())
+        # Soft update of the target network's weights
+        # θ′ ← τ θ + (1 −τ )θ′
+        target_net_state_dict = target_net.state_dict()
+        policy_net_state_dict = policy_net.state_dict()
+        for key in policy_net_state_dict:
+            target_net_state_dict[key] = policy_net_state_dict[key] * tau + target_net_state_dict[key] * (1 - tau)
+        target_net.load_state_dict(target_net_state_dict)
+
+        for lm in crit_lambdas.keys():
+            loss_vals[lm] = 0.
 
     print("t: ", time.time() - start_t)
 
