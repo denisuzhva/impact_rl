@@ -112,7 +112,7 @@ def train_q_agent(agent_data,
     print("Losses: ")
     loss_vals = {}
     for lm in crit_lambdas.keys():
-        loss_vals[lm] = 0.
+        loss_vals[lm] = float('inf')
         print(f"{crit_lambdas[lm]} * {lm}")
 
     if log_df:
@@ -160,7 +160,7 @@ def train_q_agent(agent_data,
                     print("Best mean reward updated %.3f" % (best_mean_reward)) 
 
                 #print(agent.env.get_img_state())
-                print(agent.env.state)
+                #print(agent.env.state)
                 #print(agent.env.target_state)
                 d = {"frame_idx": [frame_idx], 
                      "trials": [trial_idx], 
@@ -210,10 +210,12 @@ def train_q_agent(agent_data,
         expected_state_action_values = next_state_values * dql_gamma + rewards_v
         #state_action_values = policy_net(states_v).gather(1, actions_v)
 
+        for lm in crit_lambdas.keys():
+            loss_vals[lm] = 0.
         losses = {}
         for lm in crit_lambdas.keys():
             losses[lm] = crit_lambdas[lm] * crits[lm](state_action_values, expected_state_action_values)
-            loss_vals[lm] += losses[lm].cpu().item() # / n_train_batches
+            loss_vals[lm] += losses[lm].cpu().detach().item() # / n_train_batches
 
         optimizer.zero_grad()
         loss = sum(losses.values())
@@ -235,9 +237,6 @@ def train_q_agent(agent_data,
         for key in policy_net_state_dict:
             target_net_state_dict[key] = policy_net_state_dict[key] * tau + target_net_state_dict[key] * (1 - tau)
         target_net.load_state_dict(target_net_state_dict)
-
-        for lm in crit_lambdas.keys():
-            loss_vals[lm] = 0.
 
     print("t: ", time.time() - start_t)
 
