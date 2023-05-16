@@ -115,19 +115,19 @@ def train_q_agent(agent_data,
         loss_vals[lm] = float('inf')
         print(f"{crit_lambdas[lm]} * {lm}")
 
-    if log_df:
+    if log_df is not None:
         print("Log loaded into Trainer")
         frame_idx = log_df['frame_idx'].iloc[-1] 
         trial_idx = log_df['trial_idx'].iloc[-1]
         min_v_loss = log_df['min_v_loss'].iloc[-1]
-        best_mean_reward = log_df['top_avg_reward'].iloc[-1]
-        epsilon = log_df['eps'].iloc[-1]
+        top_avg_reward = log_df['top_avg_reward'].iloc[-1]
+        epsilon = log_df['epsilon'].iloc[-1]
     else:
         print("Initializing logging values")
         frame_idx = 0
         trial_idx = 0
         min_v_loss = float('inf')
-        best_mean_reward = -float('inf')
+        top_avg_reward = -float('inf')
         epsilon = eps_start
     
     if frame_idx == 0:
@@ -149,24 +149,24 @@ def train_q_agent(agent_data,
             #print("%d:  %d games, mean reward %.3f, (epsilon %.4f)" % (
             #    frame_idx, trial_idx, mean_reward, epsilon))
             
-            if best_mean_reward is None or mean_reward > best_mean_reward:
+            if top_avg_reward is None or mean_reward > top_avg_reward:
                 torch.save(policy_net.state_dict(), trained_dump_dir + f'{run_name}_0_policy_net.pth')
                 torch.save({
                     optimizer_chkpt_name: optimizer.state_dict(),
                     scheduler_chkpt_name: lr_scheduler.state_dict()
                 }, opt_path)
-                best_mean_reward = mean_reward
-                if best_mean_reward is not None:
-                    print("Best mean reward updated %.3f" % (best_mean_reward)) 
+                top_avg_reward = mean_reward
+                if top_avg_reward is not None:
+                    print("Best mean reward updated %.3f" % (top_avg_reward)) 
 
                 #print(agent.env.get_img_state())
-                #print(agent.env.state)
+                print(agent.env.state_prior_reset)
                 #print(agent.env.target_state)
                 d = {"frame_idx": [frame_idx], 
-                     "trials": [trial_idx], 
+                     "trial_idx": [trial_idx], 
                      "min_v_loss": [min_v_loss], 
-                     "top_avg_reward": [best_mean_reward],
-                     "eps": [epsilon],
+                     "top_avg_reward": [top_avg_reward],
+                     "epsilon": [epsilon],
                      }
                 for lm in crit_lambdas.keys():
                     d[lm] = [loss_vals[lm]]

@@ -11,7 +11,7 @@ def generate_chessboard(h, w):
 
 
 if __name__ == '__main__':
-    h = 10
-    w = 10
+    h = 9
+    w = 9
     pattern = generate_chessboard(h, w)
     cv2.imwrite(f'./ENV_PATTERNS/chessboard_{h}x{w}.png', pattern)

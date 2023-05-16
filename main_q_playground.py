@@ -29,6 +29,7 @@ if __name__ == '__main__':
     
     run_names = general_cfg['runs']
     for run_name in run_names:
+        print(run_name)
         cfg_path_run = cfg_path + run_name + '/'
         with open(cfg_path_run + 'env.yaml') as f:
             env_data = yaml.safe_load(f)

@@ -61,6 +61,7 @@ class ImageEnvV1:
 
         self.target_state = (env_img_ready / 255).astype(np.float32)
         self.state = np.zeros_like(self.reward_map, dtype=np.float32)
+        self.state_prior_reset = np.zeros_like(self.reward_map, dtype=np.float32)
         self.action_space = action_space(self.state_size)
 
     def step(self, action):
@@ -76,6 +77,7 @@ class ImageEnvV1:
         return new_state, reward, is_done, None
 
     def reset(self):
+        self.state_prior_reset = self.state
         self.state = np.zeros_like(self.state)
         self.action_space.reset()
         #self.reward_map = np.copy(self.reward_map_init)
