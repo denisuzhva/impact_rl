@@ -42,7 +42,7 @@ def train_q_agent(agent_data,
                   dql_params,
                   crit_lambdas, 
                   device, 
-                  run_name,
+                  cfg_name,
                   log_df,
                   log_df_path, 
                   trained_dump_dir, opt_path,
@@ -59,7 +59,7 @@ def train_q_agent(agent_data,
         dql_params:             Deep Q-Learning parameters (eps greedy parameters, replay buffer, etc.)
         crit_lambdas:           Weight coefficients for loss functions
         device:                 Current device (cuda or cpu)
-        run_name:               Name of the experiment for logging
+        cfg_name:               Name of the experiment config for logging
         log_df_path:            Path to training logs
         trained_dump_path:      Path to model dump
         opt_path:               Path to the optimizer and scheduler checkpoints
@@ -150,7 +150,7 @@ def train_q_agent(agent_data,
             #    frame_idx, trial_idx, mean_reward, epsilon))
             
             if top_avg_reward is None or mean_reward > top_avg_reward:
-                torch.save(policy_net.state_dict(), trained_dump_dir + f'{run_name}_0_policy_net.pth')
+                torch.save(policy_net.state_dict(), trained_dump_dir + f'{cfg_name}_0_policy_net.pth')
                 torch.save({
                     optimizer_chkpt_name: optimizer.state_dict(),
                     scheduler_chkpt_name: lr_scheduler.state_dict()
@@ -160,21 +160,21 @@ def train_q_agent(agent_data,
                     print("Best mean reward updated %.3f" % (top_avg_reward)) 
 
                 #print(agent.env.get_img_state())
-                print(agent.env.state_prior_reset)
+                #print(agent.env.state_prior_reset)
                 #print(agent.env.target_state)
-                d = {"frame_idx": [frame_idx], 
-                     "trial_idx": [trial_idx], 
-                     "min_v_loss": [min_v_loss], 
-                     "top_avg_reward": [top_avg_reward],
-                     "epsilon": [epsilon],
-                     }
-                for lm in crit_lambdas.keys():
-                    d[lm] = [loss_vals[lm]]
-                d_rounded = {key: round(value[0], 7) for key, value in d.items()}
-                print(d_rounded)
-                df = pd.DataFrame.from_dict(d)
-                df.to_csv(log_df_path, mode='a', header=log_header, index=False)
-                log_header = False
+            d = {"frame_idx": [frame_idx], 
+                 "trial_idx": [trial_idx], 
+                 "min_v_loss": [min_v_loss], 
+                 "top_avg_reward": [top_avg_reward],
+                 "epsilon": [epsilon],
+                 }
+            for lm in crit_lambdas.keys():
+                d[lm] = [loss_vals[lm]]
+            d_rounded = {key: round(value[0], 7) for key, value in d.items()}
+            print(d_rounded)
+            df = pd.DataFrame.from_dict(d)
+            df.to_csv(log_df_path, mode='a', header=log_header, index=False)
+            log_header = False
 
             if trial_idx > n_trials:
                 print("Solved in %d frames!" % frame_idx)

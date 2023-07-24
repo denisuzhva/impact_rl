@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from nets.customlayers import (
+from src.nets.customlayers import (
     activation_func,
     )
 

@@ -39,6 +39,7 @@ class Simple_Agent:
         #print("Mask", self.env.action_space.legal_action_mask)
         if np.random.random() < epsilon:
             action = self.env.action_space.sample()
+            self.env.action_space.adjust_legal(action)
         else:
             state_a = np.array([self.state], copy=False)
             state_v = torch.tensor(state_a).to(device)
@@ -46,7 +47,7 @@ class Simple_Agent:
             q_vals_v[torch.tensor(self.env.action_space.legal_action_mask == 0).view(1, -1)] = -float('inf')
             _, act_v = torch.max(q_vals_v, dim=1)
             action = int(act_v.item())
-        self.env.action_space.adjust_legal(action)
+            self.env.action_space.adjust_legal(action)
 
         new_state, reward, is_done, _ = self.env.step(action)
         self.total_reward += reward
