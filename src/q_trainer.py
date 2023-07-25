@@ -142,6 +142,7 @@ def train_q_agent(agent_data,
 
         epsilon = max(epsilon * eps_decay, eps_min)
         reward = agent.play_step(policy_net, epsilon, device=device)
+        print(reward)
         if reward is not None:
             total_rewards.append(reward)
             mean_reward = np.mean(total_rewards)

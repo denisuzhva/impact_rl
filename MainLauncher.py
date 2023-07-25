@@ -27,7 +27,8 @@ if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print('Best available device:', device)
     
-    cfg_path = f'C:/dev/_spbu/impact_rl/cfg/'
+    #cfg_path = 'C:/dev/_spbu/impact_rl/cfg/'
+    cfg_path = './cfg/'
     
     for cfg_name in configs:
         print(cfg_name)
@@ -66,11 +67,13 @@ if __name__ == '__main__':
                 agents_list[adx][model_type] = model
  
         # Log and model checkpoints
-        train_log_dir = 'C:/dev/_spbu/impact_rl/train_logs/'
+        #train_log_dir = 'C:/dev/_spbu/impact_rl/train_logs/'
+        train_log_dir = './train_logs/'
         os.makedirs(train_log_dir, exist_ok=True)
         train_log_path = train_log_dir + cfg_name + '_log.csv'
 
-        trained_dump_dir = 'C:/dev/_spbu/impact_rl/checkpoints/'
+        #trained_dump_dir = 'C:/dev/_spbu/impact_rl/checkpoints/'
+        trained_dump_dir = './checkpoints/'
         os.makedirs(trained_dump_dir, exist_ok=True)
         opt_path = trained_dump_dir + cfg_name + '_opt.pth'
         

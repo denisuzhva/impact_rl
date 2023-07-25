@@ -94,7 +94,7 @@ class SimEnvV1:
     """
     def __init__(self, 
                  solver_func=solvers.solve_batch,
-                 target_vel_path='C:/dev/_spbu/impact_rl/env_data/t_vel/vel.txt',
+                 fem_env_data_dir='C:/dev/_spbu/impact_rl/env_data/FEM/',
                  target_vel_read=False,
                  ncpu=12,
                  h=3,
@@ -105,8 +105,8 @@ class SimEnvV1:
         """
         Args:
             solver_func:        FEM solver
-            target_vel_path:    Path to the target velocity value
-            target_vel_read:    True if read target velocity from target_vel_path;
+            fem_env_data_dir:   Directory to velocity target values and optimal topology dump
+            target_vel_read:    True if read target velocity from fem_env_data_dir;
                                 False if compute target velocity by the solver
             ncpu:               Number of CPU threads for the solver
             h, w:               Environment space height and width
@@ -133,15 +133,15 @@ class SimEnvV1:
         self.action_space = action_space(self.state_size)
 
         self.ncpu = ncpu
-        self.target_vel_path = target_vel_path
+        self.fem_env_data_dir = fem_env_data_dir
         if target_vel_read:
-            self.target_vel = np.loadtxt(self.target_vel_path)
+            self.target_vel = np.loadtxt(self.fem_env_data_dir + 'vel.txt')
             print(self.target_vel)
         else:
             self.target_vel =  self.solver([self.state], ncpu_mp=1, ncpu_solver=self.ncpu)[0]
-            with open(self.target_vel_path, 'w') as f:
+            with open(self.fem_env_data_dir + 'vel.txt', 'w') as f:
                 f.write(str(self.target_vel))
-            #np.savetxt(target_vel_path, self.target_vel)
+            #np.savetxt(fem_env_data_dir, self.target_vel)
         self.vel = self.target_vel
         self.inverse_problem = inverse_problem
 
@@ -156,16 +156,19 @@ class SimEnvV1:
             reward = self.reward_weight * (self.target_vel - self.vel)
         #self.reward_map[action] = -1 * self.reward_weight
         self.state = new_state
-        if (reward > 0) or (self.state.sum() == self.state_size):
+        if reward > 0:
+            is_done = True
+            self.target_vel = self.vel
+            with open(self.fem_env_data_dir + 'vel.txt', 'w') as f:
+                f.write(str(self.target_vel))
+            np.savetxt(self.fem_env_data_dir + 'init_state.txt', self.state, fmt='%.0f')
+        elif self.state.sum() == self.state_size:
             is_done = True
         else:
             is_done = False
         return new_state, reward, is_done, None
 
     def reset(self):
-        self.target_vel = self.vel
-        with open(self.target_vel_path, 'w') as f:
-            f.write(str(self.target_vel))
         self.state_prior_reset = self.state
         self.state = np.zeros_like(self.state)
         self.action_space.reset()
