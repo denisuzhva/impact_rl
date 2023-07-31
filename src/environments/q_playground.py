@@ -136,7 +136,7 @@ class SimEnvV1:
         self.fem_env_data_dir = fem_env_data_dir
         if target_vel_read:
             self.target_vel = np.loadtxt(self.fem_env_data_dir + 'vel.txt')
-            print(self.target_vel)
+            #print(self.target_vel)
         else:
             self.target_vel =  self.solver([self.state], ncpu_mp=1, ncpu_solver=self.ncpu)[0]
             with open(self.fem_env_data_dir + 'vel.txt', 'w') as f:
@@ -149,7 +149,7 @@ class SimEnvV1:
         new_state = self.state
         new_state[action] = 1.
         self.vel =  self.solver([new_state], ncpu_mp=1, ncpu_solver=self.ncpu)[0]
-        print(self.vel)
+        #print(self.vel)
         if self.inverse_problem:
             reward = self.reward_weight * (self.vel - self.target_vel)
         else:

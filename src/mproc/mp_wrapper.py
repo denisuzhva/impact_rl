@@ -8,9 +8,9 @@ def worker_wrapper(arg):
 
 
 def mp_kwargs_wrapper(worker, kwargs_list, ncpu=6):
-    pool=mp.Pool(processes=ncpu)
-    arg = [(worker, kwargs) for kwargs in kwargs_list]
-    result = pool.map(worker_wrapper, arg)
+    with mp.Pool(processes=ncpu) as pool:
+        arg = [(worker, kwargs) for kwargs in kwargs_list]
+        result = pool.map(worker_wrapper, arg)
     return result
 
 

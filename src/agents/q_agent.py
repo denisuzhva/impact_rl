@@ -25,9 +25,8 @@ class ExperienceReplay:
 
 
 class Simple_Agent: 
-    def __init__(self, env, exp_buffer):
+    def __init__(self, env):
         self.env = env
-        self.exp_buffer = exp_buffer
         self._reset()
     
     def _reset(self):
@@ -53,9 +52,11 @@ class Simple_Agent:
         self.total_reward += reward
         
         exp = Experience(self.state, action, reward, is_done, new_state)
-        self.exp_buffer.append(exp)
         self.state = new_state
         if is_done:
             done_reward = self.total_reward
             self._reset()
-            return done_reward
+            return done_reward, exp
+        else:
+            return None, exp
+

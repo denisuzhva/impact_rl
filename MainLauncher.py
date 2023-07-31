@@ -34,37 +34,39 @@ if __name__ == '__main__':
         print(cfg_name)
         cfg_path_run = cfg_path + cfg_name + '/'
         with open(cfg_path_run + 'env.yaml') as f:
-            env_data = yaml.safe_load(f)
+            env_params = yaml.safe_load(f)
         with open(cfg_path_run + 'agents.yaml') as f:
-            agent_data = yaml.safe_load(f)
+            agent_params = yaml.safe_load(f)
         with open(cfg_path_run + 'models.yaml') as f:
-            all_models_data = yaml.safe_load(f)
+            all_model_params = yaml.safe_load(f)
         with open(cfg_path_run + 'trainer.yaml') as f:
             trainer_params = yaml.safe_load(f)
             
-        # Create environment
-        env_name = env_data['name']
+        # Create environments and agents for each environment
+        env_name = env_params['name']
+        n_agents = agent_params['n_agents']
         env_class = getattr(q_playground, env_name)
-        env = env_class(**env_data['kwargs'])
+        agent_data = {}
+        agent_data['agent_list'] = []
+        agent_class_name = agent_params['agent_class']
+        for adx in range(n_agents):
+            env = env_class(**env_params['kwargs'])
+            agent_class = getattr(q_agent, agent_class_name)
+            agent_data['agent_list'].append(agent_class(env))
         env_state_size = env.state_size
         
-        # Define the agents and Q-networks
-        agents_list = []
-        n_agents = agent_data['n_agents']
-        for adx in range(n_agents):
-            agents_list.append({})
-            buffer = q_agent.ExperienceReplay(trainer_params['dql_params']['replay_start_size'])
-            agent_class_name = agent_data['agent_class']
-            agent_class = getattr(q_agent, agent_class_name)
-            agents_list[adx]['agent'] = agent_class(env, buffer)
-            for model_type, model_data in all_models_data.items():
-                model_class_name = model_data['model_class']
-                model_class = getattr(q_nets, model_class_name)
-                model_data['params']['in_size'] = env_state_size
-                model_data['params']['out_size'] = env_state_size
-                model = model_class(model_data['params'])
-                model.to(device)
-                agents_list[adx][model_type] = model
+        # Define Q-nets
+        for model_type, model_data in all_model_params.items():
+            model_class_name = model_data['model_class']
+            model_class = getattr(q_nets, model_class_name)
+            model_data['params']['in_size'] = env_state_size
+            model_data['params']['out_size'] = env_state_size
+            model = model_class(model_data['params'])
+            model.to(device)
+            agent_data[model_type] = model
+        
+        # Define experience buffer
+        buffer = q_agent.ExperienceReplay(trainer_params['dql_params']['replay_start_size'])
  
         # Log and model checkpoints
         #train_log_dir = 'C:/dev/_spbu/impact_rl/train_logs/'
@@ -83,7 +85,7 @@ if __name__ == '__main__':
             print("Models and opt loaded")
             opt_chkp = torch.load(opt_path)
             for adx in range(n_agents):
-                #for model_type in all_models_data.keys():
+                #for model_type in all_model_params.keys():
                 model.load_state_dict(torch.load(trained_dump_dir + f'{cfg_name}_{adx}_policy_net.pth'), strict=False)
         else:
             print("Models and opt not found! Initiating new training instance")
@@ -104,7 +106,8 @@ if __name__ == '__main__':
         # Train the first agent
         if trainer_params['do_train']:
             train_q_agent(
-                agents_list[0],
+                agent_data=agent_data,
+                buffer=buffer,
                 learning_rate_params=trainer_params['lr_params'],
                 dql_params=trainer_params['dql_params'],
                 crit_lambdas=trainer_params['losses'],

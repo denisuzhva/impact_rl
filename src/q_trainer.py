@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import pandas as pd
 import time
@@ -7,6 +6,8 @@ import collections
 import torch
 from torch import nn
 from torch.optim import Adam
+
+from src.mproc.mp_wrapper import mp_kwargs_wrapper
 
 
 
@@ -37,7 +38,12 @@ def fft_l1_norm(fft_size=4096):
     return get_norm
 
 
+def agent_play(agent, agent_id, **kwargs):
+    return agent.play_step(**kwargs), agent_id
+
+
 def train_q_agent(agent_data, 
+                  buffer,
                   learning_rate_params,
                   dql_params,
                   crit_lambdas, 
@@ -51,10 +57,11 @@ def train_q_agent(agent_data,
     The trainer function for agent training.
 
     Args:
-        agent_data:             Agent data (Dictionary):
-            agent:              Agent class
-            policy_net:         Policy Q-network
-            target_net:         Target Q-network
+        agent_data:             Agent data [Dictionary]:
+            agent_list:         List of agent objects
+            policy_net:         Shared policy Q-network
+            target_net:         Shared target Q-network
+        buffer:                 External replay buffer
         learning_rate_params:   Learning rate params for optimizer and scheduler
         dql_params:             Deep Q-Learning parameters (eps greedy parameters, replay buffer, etc.)
         crit_lambdas:           Weight coefficients for loss functions
@@ -74,8 +81,9 @@ def train_q_agent(agent_data,
         'l1norm': fft_l1_norm(),
     }             
     
-    agent = agent_data['agent']
-    buffer = agent.exp_buffer
+    agent_list = agent_data['agent_list']
+    n_agents = len(agent_list)
+    #buffer = agent.exp_buffer
     policy_net = agent_data['policy_net']
     target_net = agent_data['target_net']
     target_net.load_state_dict(policy_net.state_dict())
@@ -106,8 +114,9 @@ def train_q_agent(agent_data,
     batch_size = dql_params['batch_size']
     n_trials = dql_params['n_trials']
     total_rewards_size = dql_params['total_rewards_size']
+    ncpu_env = dql_params['ncpu_env']
 
-    total_rewards = collections.deque(maxlen=total_rewards_size)
+    total_rewards = [collections.deque(maxlen=total_rewards_size) for _ in range(n_agents)]
     
     print("Losses: ")
     loss_vals = {}
@@ -141,47 +150,61 @@ def train_q_agent(agent_data,
         frame_idx += 1
 
         epsilon = max(epsilon * eps_decay, eps_min)
-        reward = agent.play_step(policy_net, epsilon, device=device)
-        print(reward)
-        if reward is not None:
-            total_rewards.append(reward)
-            mean_reward = np.mean(total_rewards)
+        kwargs_list = []
+        for adx, agent in enumerate(agent_list):
+            kwargs_list.append({'agent': agent,
+                                'agent_id': adx, 
+                                'net': policy_net,
+                                'epsilon': epsilon,
+                                'device': device,})
+        #reward = agent.play_step(policy_net, buffer, epsilon, device=device)
+        reward_list = mp_kwargs_wrapper(agent_play, kwargs_list, ncpu=ncpu_env)
 
-            #print("%d:  %d games, mean reward %.3f, (epsilon %.4f)" % (
-            #    frame_idx, trial_idx, mean_reward, epsilon))
-            
-            if top_avg_reward is None or mean_reward > top_avg_reward:
-                torch.save(policy_net.state_dict(), trained_dump_dir + f'{cfg_name}_0_policy_net.pth')
-                torch.save({
-                    optimizer_chkpt_name: optimizer.state_dict(),
-                    scheduler_chkpt_name: lr_scheduler.state_dict()
-                }, opt_path)
-                top_avg_reward = mean_reward
-                if top_avg_reward is not None:
-                    print("Best mean reward updated %.3f" % (top_avg_reward)) 
+        for (reward, exp), agent_id in reward_list:
+            print(exp)
+            buffer.append(exp)
+            if reward is not None:
+                total_rewards[agent_id].append(reward)
+                mean_reward = np.mean(total_rewards[agent_id])
 
-                #print(agent.env.get_img_state())
-                #print(agent.env.state_prior_reset)
-                #print(agent.env.target_state)
-            d = {"frame_idx": [frame_idx], 
-                 "trial_idx": [trial_idx], 
-                 "min_v_loss": [min_v_loss], 
-                 "top_avg_reward": [top_avg_reward],
-                 "epsilon": [epsilon],
-                 }
-            for lm in crit_lambdas.keys():
-                d[lm] = [loss_vals[lm]]
-            d_rounded = {key: round(value[0], 7) for key, value in d.items()}
-            print(d_rounded)
-            df = pd.DataFrame.from_dict(d)
-            df.to_csv(log_df_path, mode='a', header=log_header, index=False)
-            log_header = False
+                #print("%d:  %d games, mean reward %.3f, (epsilon %.4f)" % (
+                #    frame_idx, trial_idx, mean_reward, epsilon))
+                
+                if top_avg_reward is None or mean_reward[agent_id] > top_avg_reward:
+                    torch.save(policy_net.state_dict(), trained_dump_dir + f'{cfg_name}_0_policy_net.pth')
+                    torch.save({
+                        optimizer_chkpt_name: optimizer.state_dict(),
+                        scheduler_chkpt_name: lr_scheduler.state_dict()
+                    }, opt_path)
+                    top_avg_reward = mean_reward[agent_id]
+                    if top_avg_reward is not None:
+                        print("Best mean reward updated %.3f" % (top_avg_reward)) 
 
-            if trial_idx > n_trials:
-                print("Solved in %d frames!" % frame_idx)
-                break
-            
+                    #print(agent.env.get_img_state())
+                    #print(agent.env.state_prior_reset)
+                    #print(agent.env.target_state)
+                d = {'frame_idx': [frame_idx], 
+                     'trial_idx': [trial_idx], 
+                     'min_v_loss': [min_v_loss], 
+                     'top_avg_reward': [top_avg_reward],
+                     'epsilon': [epsilon],
+                     }
+                for lm in crit_lambdas.keys():
+                    d[lm] = [loss_vals[lm]]
+                d_rounded = {key: round(value[0], 7) for key, value in d.items()}
+                print(d_rounded)
+                df = pd.DataFrame.from_dict(d)
+                df.to_csv(log_df_path, mode='a', header=log_header, index=False)
+                log_header = False
+
+                if trial_idx > n_trials:
+                    print("Solved in %d frames!" % frame_idx)
+                    break
+                
             trial_idx += 1
+
+        print(frame_idx)
+        print("Buffer len: ", len(buffer))
 
         if len(buffer) < replay_start_size:
             continue

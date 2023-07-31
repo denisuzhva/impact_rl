@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch import nn
-from src.nets.utils_dcnn import calc_conv2d_shape
+from src.nets.utils_nn import calc_conv2d_shape
 
 
 

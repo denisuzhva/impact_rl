@@ -1,0 +1,23 @@
+do_train: true
+
+dql_params:
+  dql_gamma: 0.99                   
+  #sync_target_frames: 10000    
+  tau: 0.005
+  replay_start_size: 10000 
+  eps_start: 1.0
+  eps_decay: .999985
+  eps_min: 0.02
+  batch_size: 32
+  n_trials: 10000
+  total_rewards_size: 100
+  ncpu_env: 6
+
+lr_params:
+  lr: 0.0001
+  sched_gamma: 0.8
+  sched_step: 10000
+
+losses:
+  #l2: 1.
+  l1S: 1.
