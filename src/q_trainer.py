@@ -160,9 +160,9 @@ def train_q_agent(agent_data,
         #reward = agent.play_step(policy_net, buffer, epsilon, device=device)
         reward_list = mp_kwargs_wrapper(agent_play, kwargs_list, ncpu=ncpu_env)
 
-        for (reward, exp), agent_id in reward_list:
-            print(exp)
-            buffer.append(exp)
+        for (reward, experience), agent_id in reward_list:
+            print(experience)
+            buffer.append(experience)
             if reward is not None:
                 total_rewards[agent_id].append(reward)
                 mean_reward = np.mean(total_rewards[agent_id])

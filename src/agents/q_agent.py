@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import collections
+import itertools
 
 
 
@@ -25,7 +26,11 @@ class ExperienceReplay:
 
 
 class Simple_Agent: 
+
+    id_iter = itertools.count()
+
     def __init__(self, env):
+        self.id = next(Simple_Agent.id_iter)
         self.env = env
         self._reset()
     
@@ -51,12 +56,12 @@ class Simple_Agent:
         new_state, reward, is_done, _ = self.env.step(action)
         self.total_reward += reward
         
-        exp = Experience(self.state, action, reward, is_done, new_state)
+        experience = Experience(self.state, action, reward, is_done, new_state)
         self.state = new_state
         if is_done:
             done_reward = self.total_reward
             self._reset()
-            return done_reward, exp
+            return done_reward, experience
         else:
-            return None, exp
+            return None, experience
 

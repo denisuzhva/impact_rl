@@ -52,7 +52,8 @@ if __name__ == '__main__':
         for adx in range(n_agents):
             env = env_class(**env_params['kwargs'])
             agent_class = getattr(q_agent, agent_class_name)
-            agent_data['agent_list'].append(agent_class(env))
+            agent = agent_class(env)
+            agent_data['agent_list'].append(agent)
         env_state_size = env.state_size
         
         # Define Q-nets
