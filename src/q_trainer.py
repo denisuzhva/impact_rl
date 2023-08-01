@@ -161,7 +161,6 @@ def train_q_agent(agent_data,
         reward_list = mp_kwargs_wrapper(agent_play, kwargs_list, ncpu=ncpu_env)
 
         for (reward, experience), agent_id in reward_list:
-            print(experience)
             buffer.append(experience)
             if reward is not None:
                 total_rewards[agent_id].append(reward)
@@ -202,9 +201,6 @@ def train_q_agent(agent_data,
                     break
                 
             trial_idx += 1
-
-        print(frame_idx)
-        print("Buffer len: ", len(buffer))
 
         if len(buffer) < replay_start_size:
             continue
