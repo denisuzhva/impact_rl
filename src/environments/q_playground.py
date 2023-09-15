@@ -4,11 +4,11 @@ import src.FEM.solve_2 as solvers
 import itertools
 
 
-
 class action_space:
     """
     Simple action space class. 
     """
+
     def __init__(self, n_actions) -> None:
         self.init_n_actions = n_actions
         self.n_legal_actions = n_actions
@@ -24,7 +24,7 @@ class action_space:
         legal_actions = self.all_action_list[self.legal_action_mask == 1]
         action = np.random.choice(legal_actions)
         return action
-    
+
     def reset(self):
         self.legal_action_mask = np.ones_like(self.all_action_list)
         self.n_legal_actions = self.init_n_actions
@@ -36,7 +36,7 @@ class ImageEnvV1:
     """
     id_iter = itertools.count()
 
-    def __init__(self, 
+    def __init__(self,
                  img_path='C:/dev/_spbu/impact_rl/env_data/init_patterns/chessboard_10x10.png',
                  reward_weight=1.,
                  flatten=True):
@@ -59,20 +59,21 @@ class ImageEnvV1:
         self.state_dim = env_space_ready.shape
         self.state_size = env_space_ready.size
 
-        #self.reward_map_init = reward_weight * (2 * (env_space_ready / 255) - 1)
+        # self.reward_map_init = reward_weight * (2 * (env_space_ready / 255) - 1)
         self.reward_map = reward_weight * (2 * (env_space_ready / 255) - 1)
-        #self.reward_map = np.copy(self.reward_map_init)
+        # self.reward_map = np.copy(self.reward_map_init)
 
         self.target_state = (env_space_ready / 255).astype(np.float32)
         self.state = np.zeros_like(self.reward_map, dtype=np.float32)
-        self.state_prior_reset = np.zeros_like(self.reward_map, dtype=np.float32)
+        self.state_prior_reset = np.zeros_like(
+            self.reward_map, dtype=np.float32)
         self.action_space = action_space(self.state_size)
 
     def step(self, action):
         new_state = self.state
         new_state[action] = 1.
         reward = self.reward_map[action]
-        #self.reward_map[action] = -1 * self.reward_weight
+        # self.reward_map[action] = -1 * self.reward_weight
         self.state = new_state
         if np.array_equal(self.state, self.target_state) or (self.state.sum() == self.state_size):
             is_done = True
@@ -84,12 +85,12 @@ class ImageEnvV1:
         self.state_prior_reset = self.state
         self.state = np.zeros_like(self.state)
         self.action_space.reset()
-        #self.reward_map = np.copy(self.reward_map_init)
+        # self.reward_map = np.copy(self.reward_map_init)
         return self.state
-    
+
     def get_state(self):
         return self.state.reshape((self.h, self.w))
-        
+
 
 class SimEnvV1:
     """
@@ -97,9 +98,11 @@ class SimEnvV1:
     """
     id_iter = itertools.count()
 
-    def __init__(self, 
+    def __init__(self,
                  solver_func=solvers.solve_batch,
-                 fem_env_data_dir='C:/dev/_spbu/impact_rl/env_data/FEM/',
+                 init_dir='C:/dev/_spbu/impact_rl/',
+                 solver_subdir='FEM/2D_flex/',
+                 fem_env_data_subdir='FEM/env_data/',
                  target_vel_read=False,
                  ncpu=12,
                  h=3,
@@ -122,9 +125,16 @@ class SimEnvV1:
         """
         self.id = next(SimEnvV1.id_iter)
         self.reward_weight = reward_weight
-        self.h = h 
+        self.h = h
         self.w = w
-        self.solver = solver_func 
+        self.solver = solver_func
+        self.fem_env_data_dir = init_dir + fem_env_data_subdir
+        self.solver_kwargs = {
+            'ncpu_solver': ncpu,
+            'init_dir': init_dir,
+            'solver_subdir': solver_subdir,
+            'data_subdir': fem_env_data_subdir,
+        }
         if flatten:
             env_space_ready = np.zeros((h, w)).flatten()
         else:
@@ -134,39 +144,42 @@ class SimEnvV1:
         self.state_size = env_space_ready.size
 
         self.state = np.zeros_like(env_space_ready, dtype=np.float32)
-        self.state_prior_reset = np.zeros_like(env_space_ready, dtype=np.float32)
+        self.state_prior_reset = np.zeros_like(
+            env_space_ready, dtype=np.float32)
         self.action_space = action_space(self.state_size)
 
-        self.ncpu = ncpu
-        self.fem_env_data_dir = fem_env_data_dir
         if target_vel_read:
-            self.target_vel = np.loadtxt(self.fem_env_data_dir + 'vel.txt')
-            #print(self.target_vel)
+            self.target_vel = np.loadtxt(
+                self.fem_env_data_dir + 'top_vel.txt')
+            # print(self.target_vel)
         else:
-            self.target_vel =  self.solver([self.state], self.id, ncpu_mp=1, ncpu_solver=self.ncpu)[0]
-            with open(self.fem_env_data_dir + 'vel.txt', 'w') as f:
+            self.target_vel = self.solver(
+                [self.state], self.id, ncpu_mp=1, **self.solver_kwargs)[0]
+            with open(self.fem_env_data_dir + 'top_vel.txt', 'w') as f:
                 f.write(str(self.target_vel))
-            #np.savetxt(fem_env_data_dir, self.target_vel)
+            # np.savetxt(fem_env_data_dir, self.target_vel)
         self.vel = self.target_vel
         self.inverse_problem = inverse_problem
 
     def step(self, action):
         new_state = self.state
         new_state[action] = 1.
-        self.vel =  self.solver([new_state], self.id, ncpu_mp=1, ncpu_solver=self.ncpu)[0]
-        #print(self.vel)
+        self.vel = self.solver([new_state], self.id,
+                               ncpu_mp=1, **self.solver_kwargs)[0]
+        # print(self.vel)
         if self.inverse_problem:
             reward = self.reward_weight * (self.vel - self.target_vel)
         else:
             reward = self.reward_weight * (self.target_vel - self.vel)
-        #self.reward_map[action] = -1 * self.reward_weight
+        # self.reward_map[action] = -1 * self.reward_weight
         self.state = new_state
         if reward > 0:
             is_done = True
             self.target_vel = self.vel
-            with open(self.fem_env_data_dir + 'vel.txt', 'w') as f:
+            with open(self.fem_env_data_dir + 'top_vel.txt', 'w') as f:
                 f.write(str(self.target_vel))
-            np.savetxt(self.fem_env_data_dir + 'init_state.txt', self.state, fmt='%.0f')
+            np.savetxt(self.fem_env_data_dir +
+                       'top_cells.txt', self.state, fmt='%.0f')
         elif self.state.sum() == self.state_size:
             is_done = True
         else:
@@ -177,8 +190,8 @@ class SimEnvV1:
         self.state_prior_reset = self.state
         self.state = np.zeros_like(self.state)
         self.action_space.reset()
-        #self.reward_map = np.copy(self.reward_map_init)
+        # self.reward_map = np.copy(self.reward_map_init)
         return self.state
-    
+
     def get_state(self):
-        return self.state.reshape((self.h, self.w))    
+        return self.state.reshape((self.h, self.w))
